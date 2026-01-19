@@ -2,7 +2,7 @@
 
 You are building a single-page React application called **Snipprok** that allows users to paste code blocks and stylize them with various options, using ngrok's Mantle UI library. The app should use Mantle's CodeBlock component and overall styling system.
 
-**Important**: After each phase, verify that both `pnpm dev` and `pnpm build` work without errors before proceeding to the next phase.
+**Important**: After each phase, verify that both `pnpm dev` and `pnpm build` work without errors before proceeding to the next phase. If you don't have the tools to complete certain tasks, create them.
 
 **Documentation References:**
 - Mantle Documentation: https://mantle.ngrok.com/

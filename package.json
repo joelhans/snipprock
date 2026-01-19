@@ -11,9 +11,15 @@
   "dependencies": {
     "@ngrok/mantle": "*",
     "@phosphor-icons/react": "*",
+    "@resvg/resvg-wasm": "^2.6.2",
     "date-fns": "^4.1.0",
+    "dom-to-image-more": "^3.7.2",
+    "html-to-image": "^1.11.13",
+    "html2canvas": "^1.4.1",
+    "prismjs": "^1.30.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "satori": "^0.19.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

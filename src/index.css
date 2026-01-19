@@ -1,1 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
+
+:root {
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+}
+
+/* Make JetBrains Mono the default font for now */
+body {
+  font-family: var(--font-mono);
+}
+
+/* Ensure code-related elements use the mono font explicitly */
+pre, code, kbd, samp, textarea, input[type="text"] {
+  font-family: var(--font-mono);
+}

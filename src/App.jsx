@@ -1,16 +1,526 @@
-import React from 'react'
+import React, { useMemo, useState } from 'react'
+import { TextArea } from '@ngrok/mantle/text-area'
+import { CodeBlock, supportedLanguages } from '@ngrok/mantle/code-block'
+import { Select } from '@ngrok/mantle/select'
+import { Label } from '@ngrok/mantle/label'
+import { Input } from '@ngrok/mantle/input'
+import { Button } from '@ngrok/mantle/button'
+import { format } from 'date-fns'
+import PrismCore from 'prismjs'
+// URL for the WASM binary so Vite bundles it correctly
+import resvgWasmUrl from '@resvg/resvg-wasm/index_bg.wasm?url'
+
+const defaultCode = `# Try editing this YAML or paste your own\nname: Snipprok\nfeatures:\n  - syntax highlighting\n  - YAML by default\n  - Mantle UI\n`
+
+const langAlias = {
+  html: 'markup',
+  xml: 'markup',
+  javascript: 'javascript',
+  js: 'javascript',
+  typescript: 'typescript',
+  ts: 'typescript',
+  json: 'json',
+  jsx: 'jsx',
+  tsx: 'tsx',
+  css: 'css',
+  yaml: 'yaml',
+  yml: 'yaml',
+  sh: 'bash',
+  bash: 'bash',
+  shell: 'bash',
+  python: 'python',
+  py: 'python',
+  ruby: 'ruby',
+  rb: 'ruby',
+  go: 'go',
+  rust: 'rust',
+  text: 'markup',
+  plain: 'markup',
+  plaintext: 'markup',
+  txt: 'markup',
+}
+
+function mapLanguage(l) {
+  return langAlias[l] || l || 'markup'
+}
+
+let prismReady = false
+async function ensurePrismLanguages() {
+  if (prismReady) return
+  // Make Prism available to component modules that expect a global
+  // eslint-disable-next-line no-undef
+  globalThis.Prism = PrismCore
+  await Promise.all([
+    import('prismjs/components/prism-markup'),
+    import('prismjs/components/prism-css'),
+    import('prismjs/components/prism-clike'),
+    import('prismjs/components/prism-javascript'),
+    import('prismjs/components/prism-typescript'),
+    import('prismjs/components/prism-jsx'),
+    import('prismjs/components/prism-tsx'),
+    import('prismjs/components/prism-json'),
+    import('prismjs/components/prism-yaml'),
+    import('prismjs/components/prism-bash'),
+    import('prismjs/components/prism-python'),
+    import('prismjs/components/prism-ruby'),
+    import('prismjs/components/prism-go'),
+    import('prismjs/components/prism-rust'),
+  ])
+  prismReady = true
+}
+
+// Robust color normalizer using canvas (handles oklch/display-p3 -> sRGB rgba/hex)
+let __colorCtx = null
+function normalizeCssColor(input) {
+  try {
+    if (!__colorCtx) {
+      const c = document.createElement('canvas')
+      c.width = c.height = 1
+      __colorCtx = c.getContext('2d')
+    }
+    const ctx = __colorCtx
+    // Reset to a sentinel, then set to input. If invalid, it won't change.
+    ctx.fillStyle = '#000000'
+    ctx.fillStyle = String(input || '')
+    const parsed = ctx.fillStyle
+    // parsed is standardized (e.g., 'rgba(r, g, b, a)' or '#rrggbb')
+    return parsed || 'rgba(0, 0, 0, 0)'
+  } catch {
+    return String(input || '')
+  }
+}
+
+function buildTokenColorMap(snippetEl) {
+  // Use the actual code element so token styles match Mantle/Prism selectors
+  const codeEl = snippetEl.querySelector('pre code, code') || snippetEl
+
+  const container = document.createElement('div')
+  container.style.position = 'absolute'
+  container.style.visibility = 'hidden'
+  container.style.pointerEvents = 'none'
+  container.style.inset = '0'
+
+  const tokenTypes = [
+    'comment','punctuation','operator','keyword','atrule','string','number','boolean','function','class-name','attr-name','attr-value','tag','property','symbol','regex','important','char','builtin','constant','namespace','parameter','variable','key'
+  ]
+  const colors = {}
+  tokenTypes.forEach((t) => {
+    const span = document.createElement('span')
+    span.className = `token ${t}`
+    span.textContent = 'x'
+    container.appendChild(span)
+  })
+  codeEl.appendChild(container)
+  const spans = Array.from(container.children)
+  spans.forEach((span, i) => {
+    const t = tokenTypes[i]
+    const c = getComputedStyle(span).color
+    colors[t] = normalizeCssColor(c)
+  })
+  const defaultColor = normalizeCssColor(getComputedStyle(codeEl).color)
+  container.remove()
+  return { colors, defaultColor }
+}
+
+function readMantleCodeBlockStyles(snippetEl) {
+  const preEl = snippetEl.querySelector('pre')
+  const bodyEl = preEl?.parentElement || null // CodeBlock.Body
+  const rootEl = bodyEl?.parentElement || preEl?.parentElement || snippetEl // CodeBlock.Root
+  const preStyle = preEl ? getComputedStyle(preEl) : null
+  const rootStyle = rootEl ? getComputedStyle(rootEl) : null
+  const px = (v) => (v ? parseFloat(v) || 0 : 0)
+  const parseRadius = (v) => {
+    if (!v) return 8
+    const first = String(v).split(/[\s\/]/)[0]
+    const n = parseFloat(first)
+    return Number.isFinite(n) ? n : 8
+  }
+  return {
+    // inner pre paddings
+    paddingTop: preStyle ? px(preStyle.paddingTop) : 16,
+    paddingRight: preStyle ? px(preStyle.paddingRight) : 16,
+    paddingBottom: preStyle ? px(preStyle.paddingBottom) : 16,
+    paddingLeft: preStyle ? px(preStyle.paddingLeft) : 16,
+    // root border & bg (normalized to rgb/rgba)
+    codeBg: normalizeCssColor(rootStyle ? rootStyle.backgroundColor : 'transparent'),
+    codeBorderColor: normalizeCssColor(rootStyle ? rootStyle.borderLeftColor : 'transparent'),
+    codeBorderWidth: rootStyle ? px(rootStyle.borderLeftWidth || rootStyle.borderTopWidth) : 1,
+    codeBorderRadius: parseRadius(rootStyle ? rootStyle.borderRadius : '8px'),
+  }
+}
+
+function flattenTokensToLines(tokens) {
+  const lines = [[]]
+  function mergeTypes(type, alias) {
+    const arr = []
+    if (type) arr.push(type)
+    if (alias) {
+      if (Array.isArray(alias)) arr.push(...alias)
+      else arr.push(alias)
+    }
+    // De-duplicate while preserving order
+    return Array.from(new Set(arr))
+  }
+  function walk(token, types) {
+    if (typeof token === 'string') {
+      const parts = token.split('\n')
+      parts.forEach((part, idx) => {
+        if (idx > 0) lines.push([])
+        if (part.length) lines[lines.length - 1].push({ text: part, types })
+      })
+    } else if (typeof token.content === 'string') {
+      const merged = mergeTypes(token.type, token.alias)
+      walk(token.content, merged)
+    } else if (Array.isArray(token.content)) {
+      const merged = mergeTypes(token.type, token.alias)
+      token.content.forEach((t) => walk(t, merged))
+    }
+  }
+  tokens.forEach((t) => walk(t, typeof t === 'string' ? [] : mergeTypes(t.type, t.alias)))
+  // Trim trailing empty lines (no segments) to match visual rendering
+  while (lines.length > 1 && lines[lines.length - 1].length === 0) {
+    lines.pop()
+  }
+  return lines
+}
+
+function preserveSpaces(s) {
+  return s.replace(/\t/g, '  ').replace(/ /g, '\u00A0')
+}
+
+async function fetchFontData() {
+  // Prefer a local TTF to satisfy satori's font parser
+  const localTtf = '/fonts/JetBrainsMono-Regular.ttf'
+  const cdnTtf = 'https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono@v2.304/fonts/ttf/JetBrainsMono-Regular.ttf'
+  // Additional fallback through jsdelivr npm mirror (fontsource)
+  const cdnTtf2 = 'https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.0.21/files/jetbrains-mono-latin-400-normal.ttf'
+
+  const tryFetch = async (url) => {
+    try {
+      const resp = await fetch(url, { mode: 'cors' })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      return await resp.arrayBuffer()
+    } catch (e) {
+      return null
+    }
+  }
+
+  return (
+    (await tryFetch(localTtf)) ||
+    (await tryFetch(cdnTtf)) ||
+    (await tryFetch(cdnTtf2))
+  )
+}
+
+// Ensure resvg wasm is initialized once per session
+let resvgInitialized = false
 
 export default function App() {
+  const [code, setCode] = useState(defaultCode)
+  const [lang, setLang] = useState('yaml')
+
+  // Stylization controls
+  const [fontSize, setFontSize] = useState(14)
+  const [background, setBackground] = useState('#121212')
+  const [borderWidth, setBorderWidth] = useState(0)
+  const [padding, setPadding] = useState(48)
+  const [scale, setScale] = useState('2') // 1x, 2x, 3x
+
+  const languages = useMemo(() => Array.from(supportedLanguages), [])
+
+  function colorForTypes(types, colors, defaultColor) {
+    // Prefer atrule/keyword/tag when present; otherwise first matching known token
+    const priority = ['atrule','keyword','tag','function','class-name','property','attr-name','attr-value','string','number','boolean','operator','comment','punctuation','variable','parameter','namespace','builtin','constant','symbol','regex','important','char','key']
+    for (const p of priority) if (types?.includes(p) && colors[p]) return colors[p]
+    if (types) {
+      for (const t of types) if (colors[t]) return colors[t]
+    }
+    return defaultColor
+  }
+
+  async function handleDownload() {
+    const el = document.getElementById('snippet')
+    if (!el) return
+
+    try {
+      // Ensure web fonts are loaded (JetBrains Mono from page CSS)
+      if (document.fonts && document.fonts.ready) {
+        await document.fonts.ready
+      }
+
+      // Load Prism and grammars dynamically and set global
+      await ensurePrismLanguages()
+
+      // Build token colors from current theme (read from actual code element)
+      const { colors, defaultColor } = buildTokenColorMap(el)
+
+      // Read Mantle CodeBlock computed styles (bg, border, padding)
+      const mantle = readMantleCodeBlockStyles(el)
+
+      // Resolve language and tokenize
+      const prismLang = mapLanguage(lang)
+      const grammar = PrismCore.languages[prismLang] || PrismCore.languages.markup
+      const tokens = PrismCore.tokenize(code, grammar)
+      const lines = flattenTokensToLines(tokens)
+
+      // Use the actual DOM box size for the exported image, so 1x matches on-screen size
+      const rect = el.getBoundingClientRect()
+      const widthPx = Math.max(1, Math.round(rect.width))
+      const heightPx = Math.max(1, Math.round(rect.height))
+
+      // Build a React-like tree for satori
+      const outerComputed = getComputedStyle(el)
+      const outerBorderColor = normalizeCssColor(outerComputed.borderLeftColor || outerComputed.borderColor || 'rgba(255,255,255,0.12)')
+
+      const tree = (
+        React.createElement(
+          'div',
+          {
+            style: {
+              width: widthPx,
+              height: heightPx,
+              backgroundColor: normalizeCssColor(background),
+              color: defaultColor,
+              padding,
+              borderRadius: 8,
+              borderWidth,
+              borderStyle: 'solid',
+              borderColor: outerBorderColor,
+              display: 'flex',
+              flexDirection: 'column',
+              fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+              fontSize,
+              lineHeight: 1.5,
+              boxSizing: 'border-box',
+            },
+          },
+          React.createElement(
+            'div',
+            {
+              style: {
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: mantle.codeBg,
+                color: defaultColor,
+                borderRadius: mantle.codeBorderRadius,
+                borderWidth: mantle.codeBorderWidth,
+                borderStyle: 'solid',
+                borderColor: mantle.codeBorderColor,
+                paddingTop: mantle.paddingTop,
+                paddingRight: mantle.paddingRight,
+                paddingBottom: mantle.paddingBottom,
+                paddingLeft: mantle.paddingLeft,
+                boxSizing: 'border-box',
+                width: '100%',
+                height: '100%',
+              },
+            },
+            lines.map((segments, i) => (
+              React.createElement(
+                'div',
+                { key: i, style: { display: 'flex', flexDirection: 'row', alignItems: 'baseline' } },
+                segments.map((seg, j) => (
+                  React.createElement(
+                    'span',
+                    { key: j, style: { color: colorForTypes(seg.types, colors, defaultColor) } },
+                    preserveSpaces(seg.text || '')
+                  )
+                ))
+              )
+            ))
+          )
+        )
+      )
+
+      // Lazy-load satori & resvg-wasm
+      const [{ default: satori }, { Resvg, initWasm }] = await Promise.all([
+        import('satori'),
+        import('@resvg/resvg-wasm'),
+      ])
+
+      // Initialize resvg wasm once
+      if (!resvgInitialized) {
+        await initWasm(resvgWasmUrl)
+        resvgInitialized = true
+      }
+
+      // Load font bytes (TTF only; WOFF2 is not supported by satori's font parser)
+      const fontData = await fetchFontData()
+      if (!fontData) throw new Error('Failed to load font (TTF) for rendering')
+
+      // Generate SVG with satori
+      const svg = await satori(tree, {
+        width: widthPx,
+        height: heightPx,
+        fonts: [
+          {
+            name: 'JetBrains Mono',
+            data: fontData,
+            weight: 400,
+            style: 'normal',
+          },
+        ],
+      })
+
+      // Rasterize SVG to PNG with zoom
+      const zoom = Number(scale) || 1
+      const resvg = new Resvg(svg, {
+        fitTo: { mode: 'zoom', value: zoom },
+      })
+      const pngData = resvg.render()
+      const pngBuffer = pngData.asPng()
+
+      const blob = new Blob([pngBuffer], { type: 'image/png' })
+      const blobUrl = URL.createObjectURL(blob)
+      triggerDownload(blobUrl, zoom)
+      URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      console.error('PNG export failed:', err)
+      alert('PNG export failed. See console for details.')
+    }
+  }
+
+  function triggerDownload(url, pixelRatio) {
+    const a = document.createElement('a')
+    const date = format(new Date(), 'yyyy-MM-dd')
+    const suffix = pixelRatio > 1 ? `@${pixelRatio}x` : ''
+    a.href = url
+    a.download = `snipprok-${date}${suffix}.png`
+    a.click()
+  }
+
   return (
     <div className="min-h-screen bg-surface text-body">
-      <div className="max-w-screen-lg mx-auto py-6 px-4">
-        <header className="mb-6">
-          <h1 className="text-2xl font-semibold">Snipprok</h1>
-          <p className="opacity-70">React Code Snippet Stylizer</p>
+      <div className="max-w-screen-lg mx-auto py-6 px-4 space-y-6">
+        <header className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">Snipprok</h1>
+            <p className="opacity-70">React Code Snippet Stylizer</p>
+          </div>
+          <Button appearance="primary" onClick={handleDownload}>Download PNG</Button>
         </header>
-        <main>
-          <p>Welcome to Snipprok. Setup complete.</p>
-        </main>
+
+        <div className="grid md:grid-cols-[320px_1fr] gap-6 items-start">
+          {/* Controls */}
+          <aside className="border rounded-md p-4 bg-surface/60">
+            <div className="space-y-4">
+              <div className="grid gap-2">
+                <Label htmlFor="language">Language</Label>
+                <Select.Root value={lang} onValueChange={setLang}>
+                  <Select.Trigger aria-label="Language">
+                    <Select.Value placeholder="Select language" />
+                  </Select.Trigger>
+                  <Select.Content width="content">
+                    {languages.map((l) => (
+                      <Select.Item key={l} value={l}>{l}</Select.Item>
+                    ))}
+                  </Select.Content>
+                </Select.Root>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="font-size">Font size (px)</Label>
+                <Input
+                  id="font-size"
+                  type="number"
+                  min={8}
+                  max={48}
+                  value={fontSize}
+                  onChange={(e) => setFontSize(Number(e.target.value) || 0)}
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="background">Background</Label>
+                <input
+                  id="background"
+                  type="color"
+                  value={background}
+                  onChange={(e) => setBackground(e.target.value)}
+                  className="h-9 w-full rounded-md border border-border bg-transparent"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="border-width">Border width (px)</Label>
+                <Input
+                  id="border-width"
+                  type="number"
+                  min={0}
+                  max={32}
+                  value={borderWidth}
+                  onChange={(e) => setBorderWidth(Number(e.target.value) || 0)}
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="padding">Padding (px)</Label>
+                <Input
+                  id="padding"
+                  type="number"
+                  min={0}
+                  max={96}
+                  value={padding}
+                  onChange={(e) => setPadding(Number(e.target.value) || 0)}
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="scale">Scale</Label>
+                <Select.Root value={scale} onValueChange={setScale}>
+                  <Select.Trigger aria-label="Scale">
+                    <Select.Value placeholder="Select scale" />
+                  </Select.Trigger>
+                  <Select.Content width="content">
+                    <Select.Item value="1">1x</Select.Item>
+                    <Select.Item value="2">2x</Select.Item>
+                    <Select.Item value="3">3x</Select.Item>
+                  </Select.Content>
+                </Select.Root>
+              </div>
+            </div>
+          </aside>
+
+          {/* Editor + Preview */}
+          <div className="space-y-4">
+            <section className="grid gap-2">
+              <Label htmlFor="code">Code</Label>
+              <TextArea
+                id="code"
+                appearance="monospaced"
+                rows={12}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="Paste your code here"
+              />
+            </section>
+
+            <section className="grid gap-2">
+              <h2 className="text-lg font-semibold">Preview</h2>
+              <div
+                id="snippet"
+                style={{
+                  background,
+                  borderWidth: `${borderWidth}px`,
+                  borderStyle: 'solid',
+                  borderColor: 'var(--mantle-color-border, #2d2f36)',
+                  padding: `${padding}px`,
+                  borderRadius: 8,
+                  fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                  fontSize: `${fontSize}px`,
+                  lineHeight: 1.5,
+                  whiteSpace: 'pre',
+                }}
+              >
+                <CodeBlock.Root>
+                  <CodeBlock.Body>
+                    <CodeBlock.Code language={lang} value={code} style={{ fontSize: `${fontSize}px` }} />
+                  </CodeBlock.Body>
+                </CodeBlock.Root>
+              </div>
+            </section>
+          </div>
+        </div>
       </div>
     </div>
   )

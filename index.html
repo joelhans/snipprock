@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Snipprok</title>
+    <!-- Performance hints for Mantle assets CDN (optional but recommended) -->
+    <link rel="preconnect" href="https://assets.ngrok.com" crossorigin="anonymous" />
+    <link rel="dns-prefetch" href="https://assets.ngrok.com" />
+    <!-- Prevent wrong-theme flash: force dark before first paint -->
+    <script>
+      ;(function () {
+        try {
+          var html = document.documentElement
+          html.setAttribute('data-theme', 'dark')
+          html.setAttribute('data-applied-theme', 'dark')
+          html.classList.remove('light', 'light-high-contrast', 'dark-high-contrast')
+          html.classList.add('dark')
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

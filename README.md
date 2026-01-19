@@ -31,5 +31,4 @@ Notes:
 ## Phase status
 - Phase 1–4 complete (dev/build work; PNG export implemented)
 - Phase 5 complete (Dockerfile + .dockerignore + run docs)
-
-See PROMPT.md for Phase 6.
+- Phase 6 complete (full-screen layout, merged editor+preview, width controls; removed border width control)

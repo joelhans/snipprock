@@ -140,31 +140,30 @@ You are building a single-page React application called **Snipprok** that allows
 
 ---
 
-## Phase 6: ngrok CLI Setup & Documentation
+## Phase 6: UX improvements
 
 **Objectives:**
-- Document how to expose the application using the ngrok CLI agent
-- Create a simple script or instructions for:
-  - Installing ngrok CLI (link to https://ngrok.com/download)
-  - Authenticating with ngrok (`ngrok config add-authtoken <token>`)
-  - Running ngrok to expose the Docker container (`ngrok http 8080`)
-- Add this documentation to the README.md
-- Note: The ngrok agent will run on the host machine (not in Docker), pointing to the Docker container's exposed port
+- Change the UI so that it's full-screen with the UI controls in a "panel" on
+  the left-hand side
+- Merge the input where the user adds their code with the Preview code block for
+  a simpler UX overall
+- Add UI controls (using Mantle components) for:
+  - Width of the resulting code block (both by pixel, with a slider, and using
+    the Padding value)
+- Remove UI controls for:
+  - Border width
 
 **Deliverables:**
-- Clear documentation in README.md for:
-  - How to download and install ngrok CLI
-  - How to authenticate ngrok with your authtoken
-  - Command to expose the application: `ngrok http 8080`
-  - How to find the public URL in the ngrok CLI output
-- Optional: Create a simple shell script that starts both Docker and ngrok
+- All stylization controls implemented using Mantle components
+- Real-time preview of style changes on the CodeBlock
+- Clean, organized control panel following Mantle design patterns
 
 **Testing:**
-- Follow your own documentation to:
-  1. Start the Docker container: `docker run -p 8080:80 snipprok`
-  2. In another terminal, run: `ngrok http 8080` (with your authtoken configured)
-  3. Verify application is accessible via the ngrok public URL
-  4. Verify all functionality works through the ngrok tunnel
+- Run `pnpm dev` - verify PNG downloads correctly with all applied styles
+- Run `pnpm build` - verify build completes without errors
+- Run `docker build -t snipprok .` - verify build succeeds
+- Run `docker run -p 8080:80 snipprok` - verify app is accessible at http://localhost:8080
+- Verify all functionality works in the containerized version
 
 ---
 

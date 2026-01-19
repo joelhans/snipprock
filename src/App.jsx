@@ -220,11 +220,11 @@ export default function App() {
   const [lang, setLang] = useState('yaml')
 
   // Stylization controls
-  const [fontSize, setFontSize] = useState(14)
+  const [fontSize, setFontSize] = useState(16)
   const [background, setBackground] = useState('#121212')
-  const [borderWidth, setBorderWidth] = useState(0)
   const [padding, setPadding] = useState(48)
   const [scale, setScale] = useState('2') // 1x, 2x, 3x
+  const [width, setWidth] = useState(800) // px width of the snippet
 
   const languages = useMemo(() => Array.from(supportedLanguages), [])
 
@@ -269,9 +269,6 @@ export default function App() {
       const heightPx = Math.max(1, Math.round(rect.height))
 
       // Build a React-like tree for satori
-      const outerComputed = getComputedStyle(el)
-      const outerBorderColor = normalizeCssColor(outerComputed.borderLeftColor || outerComputed.borderColor || 'rgba(255,255,255,0.12)')
-
       const tree = (
         React.createElement(
           'div',
@@ -283,9 +280,6 @@ export default function App() {
               color: defaultColor,
               padding,
               borderRadius: 8,
-              borderWidth,
-              borderStyle: 'solid',
-              borderColor: outerBorderColor,
               display: 'flex',
               flexDirection: 'column',
               fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
@@ -390,100 +384,109 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-surface text-body">
-      <div className="max-w-screen-lg mx-auto py-6 px-4 space-y-6">
-        <header className="flex items-center justify-between gap-4">
+    <div className="h-screen bg-surface text-body grid grid-cols-[320px_1fr]">
+      {/* Left control panel */}
+      <aside className="border-r border-border p-4 overflow-y-auto bg-surface/60">
+        <div className="space-y-4">
           <div>
             <h1 className="text-2xl font-semibold">Snipprok</h1>
             <p className="opacity-70">React Code Snippet Stylizer</p>
           </div>
-          <Button appearance="primary" onClick={handleDownload}>Download PNG</Button>
-        </header>
 
-        <div className="grid md:grid-cols-[320px_1fr] gap-6 items-start">
-          {/* Controls */}
-          <aside className="border rounded-md p-4 bg-surface/60">
-            <div className="space-y-4">
-              <div className="grid gap-2">
-                <Label htmlFor="language">Language</Label>
-                <Select.Root value={lang} onValueChange={setLang}>
-                  <Select.Trigger aria-label="Language">
-                    <Select.Value placeholder="Select language" />
-                  </Select.Trigger>
-                  <Select.Content width="content">
-                    {languages.map((l) => (
-                      <Select.Item key={l} value={l}>{l}</Select.Item>
-                    ))}
-                  </Select.Content>
-                </Select.Root>
-              </div>
+          <div className="grid gap-2">
+            <Label htmlFor="language">Language</Label>
+            <Select.Root value={lang} onValueChange={setLang}>
+              <Select.Trigger aria-label="Language">
+                <Select.Value placeholder="Select language" />
+              </Select.Trigger>
+              <Select.Content width="content">
+                {languages.map((l) => (
+                  <Select.Item key={l} value={l}>{l}</Select.Item>
+                ))}
+              </Select.Content>
+            </Select.Root>
+          </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="font-size">Font size (px)</Label>
-                <Input
-                  id="font-size"
-                  type="number"
-                  min={8}
-                  max={48}
-                  value={fontSize}
-                  onChange={(e) => setFontSize(Number(e.target.value) || 0)}
-                />
-              </div>
+          <div className="grid gap-2">
+            <Label htmlFor="font-size">Font size (px)</Label>
+            <Input
+              id="font-size"
+              type="number"
+              min={8}
+              max={48}
+              value={fontSize}
+              onChange={(e) => setFontSize(Number(e.target.value) || 0)}
+            />
+          </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="background">Background</Label>
-                <input
-                  id="background"
-                  type="color"
-                  value={background}
-                  onChange={(e) => setBackground(e.target.value)}
-                  className="h-9 w-full rounded-md border border-border bg-transparent"
-                />
-              </div>
+          <div className="grid gap-2">
+            <Label htmlFor="background">Background</Label>
+            <input
+              id="background"
+              type="color"
+              value={background}
+              onChange={(e) => setBackground(e.target.value)}
+              className="h-9 w-full rounded-md border border-border bg-transparent"
+            />
+          </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="border-width">Border width (px)</Label>
-                <Input
-                  id="border-width"
-                  type="number"
-                  min={0}
-                  max={32}
-                  value={borderWidth}
-                  onChange={(e) => setBorderWidth(Number(e.target.value) || 0)}
-                />
-              </div>
+          <div className="grid gap-2">
+            <Label htmlFor="padding">Padding (px)</Label>
+            <Input
+              id="padding"
+              type="number"
+              min={0}
+              max={96}
+              value={padding}
+              onChange={(e) => setPadding(Number(e.target.value) || 0)}
+            />
+          </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="padding">Padding (px)</Label>
-                <Input
-                  id="padding"
-                  type="number"
-                  min={0}
-                  max={96}
-                  value={padding}
-                  onChange={(e) => setPadding(Number(e.target.value) || 0)}
-                />
-              </div>
+          <div className="grid gap-2">
+            <Label htmlFor="width-number">Width (px)</Label>
+            <Input
+              id="width-number"
+              type="number"
+              min={320}
+              max={1600}
+              value={width}
+              onChange={(e) => setWidth(Math.min(1600, Math.max(320, Number(e.target.value) || 0)))}
+            />
+            <input
+              id="width-range"
+              type="range"
+              min={320}
+              max={1600}
+              step={10}
+              value={width}
+              onChange={(e) => setWidth(Number(e.target.value) || width)}
+              className="w-full accent-primary"
+            />
+          </div>
 
-              <div className="grid gap-2">
-                <Label htmlFor="scale">Scale</Label>
-                <Select.Root value={scale} onValueChange={setScale}>
-                  <Select.Trigger aria-label="Scale">
-                    <Select.Value placeholder="Select scale" />
-                  </Select.Trigger>
-                  <Select.Content width="content">
-                    <Select.Item value="1">1x</Select.Item>
-                    <Select.Item value="2">2x</Select.Item>
-                    <Select.Item value="3">3x</Select.Item>
-                  </Select.Content>
-                </Select.Root>
-              </div>
-            </div>
-          </aside>
+          <div className="grid gap-2">
+            <Label htmlFor="scale">Scale</Label>
+            <Select.Root value={scale} onValueChange={setScale}>
+              <Select.Trigger aria-label="Scale">
+                <Select.Value placeholder="Select scale" />
+              </Select.Trigger>
+              <Select.Content width="content">
+                <Select.Item value="1">1x</Select.Item>
+                <Select.Item value="2">2x</Select.Item>
+                <Select.Item value="3">3x</Select.Item>
+              </Select.Content>
+            </Select.Root>
+          </div>
 
-          {/* Editor + Preview */}
-          <div className="space-y-4">
-            <section className="grid gap-2">
+          <Button appearance="primary" onClick={handleDownload} className="w-full">Download PNG</Button>
+        </div>
+      </aside>
+
+      {/* Right content: merged editor + preview */}
+      <main className="overflow-auto p-6">
+        <div className="mx-auto" style={{ width }}>
+          <div className="grid gap-3">
+            <div className="grid gap-2">
               <Label htmlFor="code">Code</Label>
               <TextArea
                 id="code"
@@ -493,35 +496,29 @@ export default function App() {
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="Paste your code here"
               />
-            </section>
+            </div>
 
-            <section className="grid gap-2">
-              <h2 className="text-lg font-semibold">Preview</h2>
-              <div
-                id="snippet"
-                style={{
-                  background,
-                  borderWidth: `${borderWidth}px`,
-                  borderStyle: 'solid',
-                  borderColor: 'var(--mantle-color-border, #2d2f36)',
-                  padding: `${padding}px`,
-                  borderRadius: 8,
-                  fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-                  fontSize: `${fontSize}px`,
-                  lineHeight: 1.5,
-                  whiteSpace: 'pre',
-                }}
-              >
-                <CodeBlock.Root>
-                  <CodeBlock.Body>
-                    <CodeBlock.Code language={lang} value={code} style={{ fontSize: `${fontSize}px` }} />
-                  </CodeBlock.Body>
-                </CodeBlock.Root>
-              </div>
-            </section>
+            <div
+              id="snippet"
+              style={{
+                background,
+                padding: `${padding}px`,
+                borderRadius: 8,
+                fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                fontSize: `${fontSize}px`,
+                lineHeight: 1.5,
+                whiteSpace: 'pre',
+              }}
+            >
+              <CodeBlock.Root>
+                <CodeBlock.Body>
+                  <CodeBlock.Code language={lang} value={code} style={{ fontSize: `${fontSize}px` }} />
+                </CodeBlock.Body>
+              </CodeBlock.Root>
+            </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

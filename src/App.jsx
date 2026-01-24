@@ -220,7 +220,7 @@ export default function App() {
   const [lang, setLang] = useState('yaml')
 
   // Stylization controls
-  const [fontSize, setFontSize] = useState(16)
+  const [fontSize, setFontSize] = useState(14)
   const [background, setBackground] = useState('#121212')
   const [padding, setPadding] = useState(48)
   const [scale, setScale] = useState('2') // 1x, 2x, 3x
@@ -263,10 +263,16 @@ export default function App() {
       const tokens = PrismCore.tokenize(code, grammar)
       const lines = flattenTokensToLines(tokens)
 
-      // Use the actual DOM box size for the exported image, so 1x matches on-screen size
+      // Determine export size deterministically, independent of DOM rounding
       const rect = el.getBoundingClientRect()
-      const widthPx = Math.max(1, Math.round(rect.width))
-      const heightPx = Math.max(1, Math.round(rect.height))
+      const widthPx = Math.max(1, Math.ceil(rect.width))
+      const lineHeight = 1.5
+      const lineHeightPx = fontSize * lineHeight
+      const outerPaddingV = padding * 2
+      const innerPaddingV = (mantle.paddingTop || 0) + (mantle.paddingBottom || 0)
+      const innerBorderV = (mantle.codeBorderWidth || 0) * 2
+      const contentV = lines.length * lineHeightPx
+      const heightPx = Math.max(1, Math.ceil(outerPaddingV + innerPaddingV + innerBorderV + contentV))
 
       // Build a React-like tree for satori
       const tree = (
@@ -284,7 +290,7 @@ export default function App() {
               flexDirection: 'column',
               fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
               fontSize,
-              lineHeight: 1.5,
+              lineHeight,
               boxSizing: 'border-box',
             },
           },

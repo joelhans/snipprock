@@ -188,6 +188,15 @@ function preserveSpaces(s) {
   return s.replace(/\t/g, '  ').replace(/ /g, '\u00A0')
 }
 
+// Compose the gradient used behind the code block, centered like Tailwind's bg-radial
+// from-sky-500/15 to-80% (transparent at 80%) positioned at center
+function radialGradientCss() {
+  // sky-500 rgb(14 165 233) with 0.15 alpha
+  const from = 'rgba(14, 165, 233, 0.15)'
+  // fade to transparent by 80% at center
+  return `radial-gradient(ellipse at center, ${from}, rgba(0,0,0,0) 80%)`
+}
+
 async function fetchFontData() {
   // Prefer a local TTF to satisfy satori's font parser
   const localTtf = '/fonts/JetBrainsMono-Regular.ttf'
@@ -282,7 +291,13 @@ export default function App() {
             style: {
               width: widthPx,
               height: heightPx,
+              // Base background color
               backgroundColor: normalizeCssColor(background),
+              // Radial gradient overlay centered (from sky-500/15 to transparent 80%)
+              backgroundImage: radialGradientCss(),
+              backgroundRepeat: 'no-repeat',
+              backgroundPosition: 'center',
+              backgroundSize: '70% 70%',
               color: defaultColor,
               padding,
               borderRadius: 8,
@@ -507,7 +522,12 @@ export default function App() {
             <div
               id="snippet"
               style={{
-                background,
+                // Base color + centered radial gradient overlay (equivalent to: bg-radial from-sky-500/15 to-80%)
+                backgroundColor: background,
+                backgroundImage: radialGradientCss(),
+                backgroundRepeat: 'no-repeat',
+                backgroundPosition: 'center',
+                backgroundSize: '70% 70%',
                 padding: `${padding}px`,
                 borderRadius: 8,
                 fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
@@ -516,7 +536,7 @@ export default function App() {
                 whiteSpace: 'pre',
               }}
             >
-              <CodeBlock.Root>
+              <CodeBlock.Root style={{ backgroundColor: '#171717' }}>
                 <CodeBlock.Body>
                   <CodeBlock.Code language={lang} value={code} style={{ fontSize: `${fontSize}px` }} />
                 </CodeBlock.Body>

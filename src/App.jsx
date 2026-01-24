@@ -145,7 +145,7 @@ function readMantleCodeBlockStyles(snippetEl) {
     codeBg: normalizeCssColor(rootStyle ? rootStyle.backgroundColor : 'transparent'),
     codeBorderColor: normalizeCssColor(rootStyle ? rootStyle.borderLeftColor : 'transparent'),
     codeBorderWidth: rootStyle ? px(rootStyle.borderLeftWidth || rootStyle.borderTopWidth) : 1,
-    codeBorderRadius: parseRadius(rootStyle ? rootStyle.borderRadius : '8px'),
+    codeBorderRadius: parseRadius(rootStyle ? rootStyle.borderRadius : '0.75rem'),
   }
 }
 
@@ -189,12 +189,12 @@ function preserveSpaces(s) {
 }
 
 // Compose the gradient used behind the code block, centered like Tailwind's bg-radial
-// from-sky-500/15 to-80% (transparent at 80%) positioned at center
-function radialGradientCss() {
-  // sky-500 rgb(14 165 233) with 0.15 alpha
-  const from = 'rgba(14, 165, 233, 0.15)'
-  // fade to transparent by 80% at center
-  return `radial-gradient(ellipse at center, ${from}, rgba(0,0,0,0) 80%)`
+// Allow tuning alpha/stop so export can better match browser rendering
+function radialGradientCss(alpha = 0.15, stopPercent = 70) {
+  const a = Math.max(0, Math.min(1, alpha))
+  const stop = Math.max(0, Math.min(100, stopPercent))
+  const from = `rgba(14, 165, 233, ${a})`
+  return `radial-gradient(ellipse at center, ${from}, rgba(0,0,0,0) ${stop}%)`
 }
 
 async function fetchFontData() {
@@ -224,16 +224,24 @@ async function fetchFontData() {
 // Ensure resvg wasm is initialized once per session
 let resvgInitialized = false
 
+function clamp(n, min, max) {
+  return Math.min(max, Math.max(min, n))
+}
+
 export default function App() {
   const [code, setCode] = useState(defaultCode)
   const [lang, setLang] = useState('yaml')
 
   // Stylization controls
-  const [fontSize, setFontSize] = useState(14)
+  const [fontSize, setFontSize] = useState(13)
   const [background, setBackground] = useState('#121212')
   const [padding, setPadding] = useState(48)
   const [scale, setScale] = useState('2') // 1x, 2x, 3x
   const [width, setWidth] = useState(800) // px width of the snippet
+
+  // Edit-friendly string states to allow empty while typing
+  const [widthInput, setWidthInput] = useState(String(width))
+  const [paddingInput, setPaddingInput] = useState(String(padding))
 
   const languages = useMemo(() => Array.from(supportedLanguages), [])
 
@@ -245,6 +253,58 @@ export default function App() {
       for (const t of types) if (colors[t]) return colors[t]
     }
     return defaultColor
+  }
+
+  function handleWidthChange(e) {
+    const v = e.target.value
+    setWidthInput(v)
+    if (v === '') return
+    const n = Number(v)
+    if (Number.isFinite(n)) {
+      const c = clamp(Math.round(n), 320, 1600)
+      setWidth(c)
+    }
+  }
+
+  function handleWidthBlur() {
+    if (widthInput === '') {
+      setWidthInput(String(width))
+      return
+    }
+    const n = Number(widthInput)
+    if (!Number.isFinite(n)) {
+      setWidthInput(String(width))
+      return
+    }
+    const c = clamp(Math.round(n), 320, 1600)
+    setWidth(c)
+    setWidthInput(String(c))
+  }
+
+  function handlePaddingChange(e) {
+    const v = e.target.value
+    setPaddingInput(v)
+    if (v === '') return
+    const n = Number(v)
+    if (Number.isFinite(n)) {
+      const c = clamp(Math.round(n), 0, 96)
+      setPadding(c)
+    }
+  }
+
+  function handlePaddingBlur() {
+    if (paddingInput === '') {
+      setPaddingInput(String(padding))
+      return
+    }
+    const n = Number(paddingInput)
+    if (!Number.isFinite(n)) {
+      setPaddingInput(String(padding))
+      return
+    }
+    const c = clamp(Math.round(n), 0, 96)
+    setPadding(c)
+    setPaddingInput(String(c))
   }
 
   async function handleDownload() {
@@ -283,6 +343,9 @@ export default function App() {
       const contentV = lines.length * lineHeightPx
       const heightPx = Math.max(1, Math.ceil(outerPaddingV + innerPaddingV + innerBorderV + contentV))
 
+      // Slightly boost gradient alpha for export to match browser compositing
+      const EXPORT_GRADIENT_ALPHA = 0.48; // tuned to visually match browser's 0.15
+
       // Build a React-like tree for satori
       const tree = (
         React.createElement(
@@ -293,14 +356,14 @@ export default function App() {
               height: heightPx,
               // Base background color
               backgroundColor: normalizeCssColor(background),
-              // Radial gradient overlay centered (from sky-500/15 to transparent 80%)
-              backgroundImage: radialGradientCss(),
+              // Radial gradient overlay (boosted for export)
+              backgroundImage: radialGradientCss(EXPORT_GRADIENT_ALPHA, 70),
               backgroundRepeat: 'no-repeat',
               backgroundPosition: 'center',
-              backgroundSize: '70% 70%',
+              backgroundSize: '100% 100%',
               color: defaultColor,
               padding,
-              borderRadius: 8,
+              borderRadius: 0,
               display: 'flex',
               flexDirection: 'column',
               fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
@@ -317,10 +380,10 @@ export default function App() {
                 flexDirection: 'column',
                 backgroundColor: mantle.codeBg,
                 color: defaultColor,
-                borderRadius: mantle.codeBorderRadius,
-                borderWidth: mantle.codeBorderWidth,
+                borderRadius: 0,
+                borderWidth: 1,
                 borderStyle: 'solid',
-                borderColor: mantle.codeBorderColor,
+                borderColor: '#404040',
                 paddingTop: mantle.paddingTop,
                 paddingRight: mantle.paddingRight,
                 paddingBottom: mantle.paddingBottom,
@@ -440,16 +503,7 @@ export default function App() {
             />
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor="background">Background</Label>
-            <input
-              id="background"
-              type="color"
-              value={background}
-              onChange={(e) => setBackground(e.target.value)}
-              className="h-9 w-full rounded-md border border-border bg-transparent"
-            />
-          </div>
+          {/* Background picker removed per request */}
 
           <div className="grid gap-2">
             <Label htmlFor="padding">Padding (px)</Label>
@@ -458,8 +512,9 @@ export default function App() {
               type="number"
               min={0}
               max={96}
-              value={padding}
-              onChange={(e) => setPadding(Number(e.target.value) || 0)}
+              value={paddingInput}
+              onChange={handlePaddingChange}
+              onBlur={handlePaddingBlur}
             />
           </div>
 
@@ -470,8 +525,9 @@ export default function App() {
               type="number"
               min={320}
               max={1600}
-              value={width}
-              onChange={(e) => setWidth(Math.min(1600, Math.max(320, Number(e.target.value) || 0)))}
+              value={widthInput}
+              onChange={handleWidthChange}
+              onBlur={handleWidthBlur}
             />
             <input
               id="width-range"
@@ -480,7 +536,7 @@ export default function App() {
               max={1600}
               step={10}
               value={width}
-              onChange={(e) => setWidth(Number(e.target.value) || width)}
+              onChange={(e) => { const val = Number(e.target.value) || width; setWidth(val); setWidthInput(String(val)); }}
               className="w-full accent-primary"
             />
           </div>
@@ -527,16 +583,16 @@ export default function App() {
                 backgroundImage: radialGradientCss(),
                 backgroundRepeat: 'no-repeat',
                 backgroundPosition: 'center',
-                backgroundSize: '70% 70%',
+                backgroundSize: '100% 100%',
                 padding: `${padding}px`,
-                borderRadius: 8,
+                borderRadius: 0,
                 fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
                 fontSize: `${fontSize}px`,
                 lineHeight: 1.5,
                 whiteSpace: 'pre',
               }}
             >
-              <CodeBlock.Root style={{ backgroundColor: '#171717' }}>
+              <CodeBlock.Root style={{ backgroundColor: '#171717', borderRadius: 0 }}>
                 <CodeBlock.Body>
                   <CodeBlock.Code language={lang} value={code} style={{ fontSize: `${fontSize}px` }} />
                 </CodeBlock.Body>

@@ -9,6 +9,8 @@ import { format } from 'date-fns'
 import PrismCore from 'prismjs'
 // URL for the WASM binary so Vite bundles it correctly
 import resvgWasmUrl from '@resvg/resvg-wasm/index_bg.wasm?url'
+// Import the pre-rendered gradient blur image
+import gradientBlurUrl from '/rainbow.png?url'
 
 const defaultCode = `# Try editing this YAML or paste your own\nname: Snipprok\nfeatures:\n  - syntax highlighting\n  - YAML by default\n  - Mantle UI\n`
 
@@ -229,6 +231,24 @@ async function fetchFontData() {
   )
 }
 
+// Fetch gradient image as base64 data URL for satori
+async function fetchGradientImageData() {
+  try {
+    const resp = await fetch(gradientBlurUrl)
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const blob = await resp.blob()
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  } catch (e) {
+    console.error('Failed to load gradient image:', e)
+    return null
+  }
+}
+
 // Ensure resvg wasm is initialized once per session
 let resvgInitialized = false
 
@@ -241,7 +261,7 @@ const CODE_BLOCK_BG = 'rgb(23, 23, 23)'
 const CODE_BLOCK_BORDER_COLOR = 'rgb(64, 64, 64)'
 const CODE_BLOCK_BORDER_RADIUS = 12 // rounded-xl
 const CODE_BLOCK_PADDING = 24 // p-6
-const GRADIENT_WIDTH = '90%'
+const GRADIENT_WIDTH_PERCENT = 1.5 // 90% of container width
 const GRADIENT_OPACITY = 0.15
 
 export default function App() {
@@ -360,8 +380,16 @@ export default function App() {
       const contentV = lines.length * lineHeightPx
       const heightPx = Math.max(1, Math.ceil(outerPaddingV + innerPaddingV + innerBorderV + contentV))
 
-      // Build a React-like tree for satori with layered gradient
-      // Outer container with position relative for gradient positioning
+      // Calculate gradient image dimensions (90% width, 16:9 aspect ratio, centered)
+      const gradientW = Math.round(widthPx * GRADIENT_WIDTH_PERCENT)
+      const gradientH = Math.round(heightPx * GRADIENT_WIDTH_PERCENT)
+      const gradientLeft = Math.round((widthPx - gradientW) / 2)
+      const gradientTop = Math.round((heightPx - gradientH) / 2)
+
+      // Load gradient image as data URL for satori
+      const gradientDataUrl = await fetchGradientImageData()
+
+      // Build a React-like tree for satori
       const tree = (
         React.createElement(
           'div',
@@ -383,20 +411,18 @@ export default function App() {
               overflow: 'hidden',
             },
           },
-          // Gradient layer (absolutely positioned, behind content)
-          React.createElement(
-            'div',
+          // Gradient blur image (pre-rendered PNG)
+          gradientDataUrl && React.createElement(
+            'img',
             {
+              src: gradientDataUrl,
               style: {
                 position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: GRADIENT_WIDTH,
-                aspectRatio: '16 / 9',
-                borderRadius: '100%',
-                background: NGROK_GRADIENT,
-                opacity: GRADIENT_OPACITY,
+                top: gradientTop,
+                left: gradientLeft,
+                width: gradientW,
+                height: gradientH,
+                
               },
             }
           ),
@@ -598,42 +624,29 @@ export default function App() {
               <TextArea
                 id="code"
                 appearance="monospaced"
-                rows={12}
+                rows={6}
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="Paste your code here"
+                placeholder="Paste your code here..."
               />
             </div>
-
-            {/* Snippet container with ngrok-style gradient */}
             <div
               id="snippet"
               className="relative overflow-hidden"
               style={{
                 backgroundColor: background,
-                padding: `${padding}px`,
-                borderRadius: 0,
+                padding,
                 fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-                fontSize: `${fontSize}px`,
-                lineHeight: 1.5,
-                whiteSpace: 'pre',
               }}
             >
-              {/* ngrok-style gradient blur layer */}
-              <div
-                className="pointer-events-none absolute"
+              {/* Gradient blur image (behind code block) */}
+              <img
+                src={gradientBlurUrl}
+                alt=""
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
                 style={{
-                  top: '50%',
-                  left: '50%',
-                  width: GRADIENT_WIDTH,
-                  maxWidth: '670px',
-                  aspectRatio: '16 / 9',
-                  borderRadius: '100%',
-                  background: NGROK_GRADIENT,
-                  opacity: GRADIENT_OPACITY,
-                  filter: 'url(#gradient-blur)',
-                  backfaceVisibility: 'hidden',
-                  transform: 'translate(-50%, -50%)',
+                  width: '150%', height: '150%', objectFit: 'cover',
+                  
                 }}
               />
               {/* Code block (above gradient) */}

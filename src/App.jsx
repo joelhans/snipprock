@@ -188,13 +188,21 @@ function preserveSpaces(s) {
   return s.replace(/\t/g, '  ').replace(/ /g, '\u00A0')
 }
 
-// Compose the gradient used behind the code block, centered like Tailwind's bg-radial
-// Allow tuning alpha/stop so export can better match browser rendering
-function radialGradientCss(alpha = 0.15, stopPercent = 70) {
-  const a = Math.max(0, Math.min(1, alpha))
-  const stop = Math.max(0, Math.min(100, stopPercent))
-  const from = `rgba(14, 165, 233, ${a})`
-  return `radial-gradient(ellipse at center, ${from}, rgba(0,0,0,0) ${stop}%)`
+// ngrok-style linear gradient (matches homepage gradient)
+// Returns a CSS linear-gradient string for use in backgroundImage
+const NGROK_GRADIENT = 'linear-gradient(98deg, #f59e0b 1.35%, #a3e635 18.48%, #34d399 38.35%, #0ea5e9 58.63%, #a855f7 79.7%, #f43f5e 100%)'
+
+// SVG filter for soft gradient blur (similar to ngrok's gradient-blur filter)
+function GradientBlurFilter() {
+  return (
+    <svg width="0" height="0" style={{ position: 'absolute' }}>
+      <defs>
+        <filter id="gradient-blur" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="40" />
+        </filter>
+      </defs>
+    </svg>
+  )
 }
 
 async function fetchFontData() {
@@ -228,6 +236,14 @@ function clamp(n, min, max) {
   return Math.min(max, Math.max(min, n))
 }
 
+// Shared style constants for UI and export
+const CODE_BLOCK_BG = 'rgb(23, 23, 23)'
+const CODE_BLOCK_BORDER_COLOR = 'rgb(64, 64, 64)'
+const CODE_BLOCK_BORDER_RADIUS = 12 // rounded-xl
+const CODE_BLOCK_PADDING = 24 // p-6
+const GRADIENT_WIDTH = '90%'
+const GRADIENT_OPACITY = 0.15
+
 export default function App() {
   const [code, setCode] = useState(defaultCode)
   const [lang, setLang] = useState('yaml')
@@ -237,7 +253,7 @@ export default function App() {
   const [background, setBackground] = useState('#121212')
   const [padding, setPadding] = useState(48)
   const [scale, setScale] = useState('2') // 1x, 2x, 3x
-  const [width, setWidth] = useState(800) // px width of the snippet
+  const [width, setWidth] = useState(640) // px width of the snippet
 
   // Edit-friendly string states to allow empty while typing
   const [widthInput, setWidthInput] = useState(String(width))
@@ -338,29 +354,23 @@ export default function App() {
       const lineHeight = 1.5
       const lineHeightPx = fontSize * lineHeight
       const outerPaddingV = padding * 2
-      const innerPaddingV = (mantle.paddingTop || 0) + (mantle.paddingBottom || 0)
-      const innerBorderV = (mantle.codeBorderWidth || 0) * 2
+      // Use our constant for inner padding (p-6 = 24px)
+      const innerPaddingV = CODE_BLOCK_PADDING * 2
+      const innerBorderV = 2 // 1px border top + bottom
       const contentV = lines.length * lineHeightPx
       const heightPx = Math.max(1, Math.ceil(outerPaddingV + innerPaddingV + innerBorderV + contentV))
 
-      // Slightly boost gradient alpha for export to match browser compositing
-      const EXPORT_GRADIENT_ALPHA = 0.48; // tuned to visually match browser's 0.15
-
-      // Build a React-like tree for satori
+      // Build a React-like tree for satori with layered gradient
+      // Outer container with position relative for gradient positioning
       const tree = (
         React.createElement(
           'div',
           {
             style: {
+              position: 'relative',
               width: widthPx,
               height: heightPx,
-              // Base background color
               backgroundColor: normalizeCssColor(background),
-              // Radial gradient overlay (boosted for export)
-              backgroundImage: radialGradientCss(EXPORT_GRADIENT_ALPHA, 70),
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'center',
-              backgroundSize: '100% 100%',
               color: defaultColor,
               padding,
               borderRadius: 0,
@@ -370,24 +380,41 @@ export default function App() {
               fontSize,
               lineHeight,
               boxSizing: 'border-box',
+              overflow: 'hidden',
             },
           },
+          // Gradient layer (absolutely positioned, behind content)
           React.createElement(
             'div',
             {
               style: {
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: GRADIENT_WIDTH,
+                aspectRatio: '16 / 9',
+                borderRadius: '100%',
+                background: NGROK_GRADIENT,
+                opacity: GRADIENT_OPACITY,
+              },
+            }
+          ),
+          // Code block container
+          React.createElement(
+            'div',
+            {
+              style: {
+                position: 'relative',
                 display: 'flex',
                 flexDirection: 'column',
-                backgroundColor: mantle.codeBg,
+                backgroundColor: CODE_BLOCK_BG,
                 color: defaultColor,
-                borderRadius: 0,
+                borderRadius: CODE_BLOCK_BORDER_RADIUS,
                 borderWidth: 1,
                 borderStyle: 'solid',
-                borderColor: '#404040',
-                paddingTop: mantle.paddingTop,
-                paddingRight: mantle.paddingRight,
-                paddingBottom: mantle.paddingBottom,
-                paddingLeft: mantle.paddingLeft,
+                borderColor: CODE_BLOCK_BORDER_COLOR,
+                padding: CODE_BLOCK_PADDING,
                 boxSizing: 'border-box',
                 width: '100%',
                 height: '100%',
@@ -396,7 +423,7 @@ export default function App() {
             lines.map((segments, i) => (
               React.createElement(
                 'div',
-                { key: i, style: { display: 'flex', flexDirection: 'row', alignItems: 'baseline' } },
+                { key: i, style: { display: 'flex', flexDirection: 'row', alignItems: 'baseline', minHeight: lineHeightPx } },
                 segments.map((seg, j) => (
                   React.createElement(
                     'span',
@@ -469,6 +496,9 @@ export default function App() {
 
   return (
     <div className="h-screen bg-surface text-body grid grid-cols-[320px_1fr]">
+      {/* SVG filter definition for gradient blur */}
+      <GradientBlurFilter />
+
       {/* Left control panel */}
       <aside className="border-r border-border p-4 overflow-y-auto bg-surface/60">
         <div className="space-y-4">
@@ -575,15 +605,12 @@ export default function App() {
               />
             </div>
 
+            {/* Snippet container with ngrok-style gradient */}
             <div
               id="snippet"
+              className="relative overflow-hidden"
               style={{
-                // Base color + centered radial gradient overlay (equivalent to: bg-radial from-sky-500/15 to-80%)
                 backgroundColor: background,
-                backgroundImage: radialGradientCss(),
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'center',
-                backgroundSize: '100% 100%',
                 padding: `${padding}px`,
                 borderRadius: 0,
                 fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
@@ -592,9 +619,33 @@ export default function App() {
                 whiteSpace: 'pre',
               }}
             >
-              <CodeBlock.Root style={{ backgroundColor: '#171717', borderRadius: 0 }}>
+              {/* ngrok-style gradient blur layer */}
+              <div
+                className="pointer-events-none absolute"
+                style={{
+                  top: '50%',
+                  left: '50%',
+                  width: GRADIENT_WIDTH,
+                  maxWidth: '670px',
+                  aspectRatio: '16 / 9',
+                  borderRadius: '100%',
+                  background: NGROK_GRADIENT,
+                  opacity: GRADIENT_OPACITY,
+                  filter: 'url(#gradient-blur)',
+                  backfaceVisibility: 'hidden',
+                  transform: 'translate(-50%, -50%)',
+                }}
+              />
+              {/* Code block (above gradient) */}
+              <CodeBlock.Root
+                className="relative rounded-xl border"
+                style={{
+                  backgroundColor: CODE_BLOCK_BG,
+                  borderColor: CODE_BLOCK_BORDER_COLOR,
+                }}
+              >
                 <CodeBlock.Body>
-                  <CodeBlock.Code language={lang} value={code} style={{ fontSize: `${fontSize}px` }} />
+                  <CodeBlock.Code className="!p-6" language={lang} value={code} style={{ fontSize: `${fontSize}px` }} />
                 </CodeBlock.Body>
               </CodeBlock.Root>
             </div>
